@@ -46,8 +46,9 @@ class Room:
 
     def str(self):
         c = ''
-        for i in self.clients:
-            c += str(i.id) + ' '
+        for i, id in enumerate(self.clients):
+            if i != 0:
+                c += str(id.id) + ','
         return c
 
 
@@ -207,6 +208,11 @@ class Teacher(Client):
                     break
                 elif msg == 'pong':
                     self.pong_time = time.time()
+                    continue
+                elif msg == 'connect_student_list':
+                    return_msg = 'connect_student_list:'+self.room.str() + '┯'
+                    self.send(return_msg)
+                    continue
 
                 self.room.send(msg)
                 print(msg)
@@ -222,8 +228,8 @@ class Teacher(Client):
 
 
 class ServerMain:
-    ip = '127.0.0.1'
-    port = 15976
+    ip = ''
+    port = 15555
 
     def __init__(self):
         self.rooms = []     # server에 만들어진 모든방을 넣을 list
