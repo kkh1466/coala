@@ -261,7 +261,7 @@ class ServerMain:
                 self.students[student_id]=student  # 학생 dictionary에 정보 저장
                 room.add(student)  # 방에 학생을 넣음
 
-                msg='connect♬'+student_id+'┯'
+                msg='connect:'+student_id+'┯'
                 room.clients[0].send(msg)  # 선생님에게 학생 접속 메세지 전송
 
                 print(student_id, 'connected in', room.teacher_id)
