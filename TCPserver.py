@@ -155,6 +155,7 @@ class Student(Client):
                     break
                 elif msg == 'pong':
                     self.pong_time = time.time()
+                    continue
 
                 self.room.clients[0].send(msg)
                 print(msg)
