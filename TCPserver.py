@@ -2,6 +2,158 @@ import threading
 import socket
 import time
 from datetime import datetime
+import os
+import pymysql
+
+def preventDuplication(filename) -> bool:
+    print("preventDuplication 함수 진입")
+    path = f'src/{filename}'
+
+    if os.path.isfile(path):
+        print('이미 존재하는 파일')
+        return True
+    else:
+        return False
+
+
+def insertCode(filename, memo):
+    '''
+    DB에 (저장시간, 학생ID, 문제번호, 파일경로) 를 insert함
+    :param filename: 파일 경로 (상대경로)
+    :return:
+    '''
+
+    print("insertCode 함수 진입")
+    _name, _ext = os.path.splitext(filename)
+    filename_splited = _name.split('-')
+
+    try:
+        print("DB에 저장하는 중")
+        print(1)
+        coala_db = pymysql.connect(
+            host='ls-0003016e97366f8af5757aae3a927c0470d990b2.crqrymk8yrjv.ap-northeast-2.rds.amazonaws.com',
+            user='dbmasteruser',
+            password='(Lwx8|9H5AXfSZ%pH5#RkIcs$W=x1zNo',
+            db='CoalaService',
+            charset='utf8'
+        )
+        print(2)
+        cursor = coala_db.cursor(pymysql.cursors.DictCursor)
+        print(3)
+        sql = 'INSERT INTO code_history_student (processing_time, student_id, problem_number, submit_code, memo) VALUES (%s, %s, %s, %s, %s)'
+        print(4)
+        cursor.execute(sql, (str(datetime.now()), filename_splited[0], filename_splited[1], './' + filename, memo))
+        print(5)
+        coala_db.commit()
+        print(6)
+        print("DB에 올리는 내용: ", filename_splited[0], filename_splited[1], './' + filename, memo)
+
+    except Exception as e:
+        return str(e)
+
+    finally:
+        cursor.close()
+        print("insertCode(DB 올림) 함수 종료")
+
+
+def insertCode_teacher(filename, stdid, compcnt, processingstatus):
+    '''
+        DB에 (저장시간, 학생ID, 문제번호, 파일경로) 를 insert함
+        :param filename: 파일 경로 (상대경로)
+        :param stdid: 학생ID
+        :param compcnt: 컴파일 횟수
+        :param processingstatus: 처리 상태
+        :return:
+        '''
+
+    print("insertCode 함수 진입")
+    _name, _ext = os.path.splitext(filename)
+    filename_splited = _name.split('-')
+    print(filename_splited)
+
+    try:
+        print("DB에 저장하는 중")
+        print(1)
+        coala_db = pymysql.connect(
+            host='ls-0003016e97366f8af5757aae3a927c0470d990b2.crqrymk8yrjv.ap-northeast-2.rds.amazonaws.com',
+            user='dbmasteruser',
+            password='(Lwx8|9H5AXfSZ%pH5#RkIcs$W=x1zNo',
+            db='CoalaService',
+            charset='utf8'
+        )
+        print(2)
+        cursor = coala_db.cursor(pymysql.cursors.DictCursor)
+        print(3)
+        sql = 'INSERT INTO code_history_teacher (teacher_id, processing_time, problem_num, student_id, compile_count, submit_code, processing_status) VALUES (%s, %s, %s, %s, %s, %s, %s)'
+        print(4)
+
+        cursor.execute(sql, (
+            filename_splited[0][7:], str(datetime.now()), filename_splited[1], stdid, compcnt, './' + filename,
+            processingstatus))
+        print(5)
+        coala_db.commit()
+        print(6)
+        print("DB에 올리는 내용: ", filename_splited[0], str(datetime.now()), filename_splited[1], stdid, compcnt,
+              './' + filename, processingstatus)
+
+    except Exception as e:
+        return str(e)
+
+    finally:
+        cursor.close()
+        print("insertCode(DB 올림) 함수 종료")
+
+
+def getFileFromServer(filename, memo) -> str:
+    '''
+    파일을 수신받아서 해당 디렉토리에 저장함
+    :param filename: 파일 경로 (상대경로)
+    :param memo: 메모
+    :return: new filename
+    '''
+    print("getFileFromServer 함수 진입")
+    data_transferred = 0
+
+    # 중복 파일이 있는지 확인
+    # 중복 파일이 있으면 카운트업
+    if preventDuplication(filename):
+        print("중복 파일 있음")
+        count = 0
+        path = 'src'
+
+        file_list = os.listdir(path)
+        # print(os.listdir(path))
+
+        _name, _ext = os.path.splitext(filename)  # 확장자 분리
+        file_list_log = [file for file in file_list if file.startswith(_name)]
+
+        count = len(file_list_log)
+
+        filename = f'{_name}-{count}{_ext}'
+
+    # 저장시간, 학생ID, 문제번호, 파일경로
+    # DB에 저장
+    insertCode(filename, memo)
+
+    return filename
+
+
+def getFileFromServer_teacher(filename, stdid, compcnt, processingstatus) -> str:
+    '''
+    파일을 수신받아서 해당 디렉토리에 저장함
+    :param filename: 파일 경로 (상대경로)
+    :param stdid: 학생id
+    :param compcnt: 컴파일 횟수
+    :param processingstatus: 처리 상태
+    :return: new filename
+    '''
+    print("getFileFromServer 함수 진입")
+    data_transferred = 0
+
+    # DB에 저장
+    insertCode_teacher(filename, stdid, compcnt, processingstatus)
+
+    return filename
 
 
 log_sw=True
@@ -156,8 +308,21 @@ class Student(Client):
                 elif msg == 'pong':
                     self.pong_time = time.time()
                     continue
+                elif msg[:5] == 'file:':  # 파일 저장
+                    self.filename = msg
+                    print(self.filename)
+                    t = threading.Thread(target=self.file_save, args=())
+                    t.start()
+                    t.join()
+                elif msg[:12] == 'codereceive:':  # 서버에서 저장된 코드 다운로드
+                    self.fileroot = msg
+                    print(self.fileroot)
+                    t = threading.Thread(target=self.codereceive, args=())
+                    t.start()
+                    t.join()
+                else:  # 선생님에게 전달 
+                    self.room.clients[0].send(msg)
 
-                self.room.clients[0].send(msg)
                 print(msg)
 
         except Exception:
@@ -166,6 +331,91 @@ class Student(Client):
 
         if self.ping_sw == True:
             self.disconnect()
+
+    def file_save(self):
+        try:
+            print("file save 함수 진입")
+            data_transferred = 0
+
+            # filename = self.sock.recv(1024)  # 클라이언트로부터 프로토콜과 파일 이름을 전달받음
+
+            # self.filename = self.filename.decode()  # 파일 이름 이진바이트 스트림 데이터를 일반 문자열로 변환
+
+            self.filename, filesize, memo, _ = self.filename.split('$')
+            # filesize, _ = filesize.split('$')
+            protocol, self.filename = self.filename.split(':')  # 프로토콜과 파일이름 분리
+            if protocol == 'file':
+                print("프로토콜 확인, ok보냄")
+                self.sock.send("ok".encode())  # 파일 받기 준비 완료
+
+                print("getFileFromServer 함수 이제 진입할거임.")
+                self.filename = getFileFromServer(self.filename, memo)  # 파일 수신
+                print(self.filename)
+
+                data = self.sock.recv(1024)
+                print("받은 데이터", data)
+                data_transferred += len(data)
+                # 클라우드 컴퓨터에 파일 저장
+                with open('src/' + self.filename, 'wb') as f:
+                    try:
+                        f.write(data)
+                        while data_transferred < int(filesize):
+                            data = self.sock.recv(1024)
+                            data_transferred += len(data)
+                            f.write(data)
+                            # data = data.decode('utf-8')
+
+                    except Exception as e:
+                        print(e)
+
+                print('파일 [%s] 전송 종료. 전송량 [%d]' % (self.filename, data_transferred))
+                return True
+
+        except ConnectionResetError as e:
+            print('Disconnected from client error:', e)
+            return False
+
+    def codereceive(self):
+        try:
+            print("codereceive 함수 진입")
+
+            data = ''
+            protocol, filename = self.fileroot.split(':')
+            filename = filename.split('$')[0]
+
+            if protocol == 'codereceive':
+                datatransfer = 0
+                _name = filename[2:]
+                filesize = str(os.path.getsize(f'src/{_name}'))
+
+                s = f'codereceive:{_name}╋{filesize}╋'
+
+                with open('src/' + _name, 'r') as f:
+                    try:
+                        _data = f.read(1024)
+                        while _data:
+                            data += str(_data)
+                            datatransfer += len(_data)
+                            _data = f.read(1024)
+
+                    except Exception as e:
+                        print(e)
+
+                s += data
+                s += '$'
+                print("encode", s.encode())
+                self.sock.send(s.encode())
+                print("decode", s.encode().decode())
+
+                print('파일 [%s] 전송 종료. 전송량 [%d]' % (_name, datatransfer))
+
+
+            else:
+                print('서버에서 준비 실패 : file로 프로토콜이 제대로 설정되어있는지 확인 필요')
+
+        except Exception as e:
+            print(e)
+            return False
 
 
 
@@ -214,8 +464,14 @@ class Teacher(Client):
                     return_msg = 'connect_student_list:'+self.room.str() + '┯'
                     self.send(return_msg)
                     continue
-
-                self.room.send(msg)
+                elif msg[:5] == 'file:':  # 파일 저장
+                    self.filename = msg
+                    print(self.filename)
+                    t = threading.Thread(target=self.file_save, args=())
+                    t.start()
+                    t.join()
+                else:  # 방의 모든 사람들에게 전달
+                    self.room.send(msg)
                 print(msg)
 
         except Exception as e:
@@ -226,6 +482,45 @@ class Teacher(Client):
         if self.ping_sw == True:
             self.disconnect() 
 
+    def file_save(self):
+        try:
+            print("teacher file save 함수 진입")
+            data_transferred = 0
+
+            # file:teacher선생님id-문제번호.cpp$파일크기$학생id$컴파일횟수$processingstatus$
+            self.filename, filesize, stdid, compcnt, processingstatus, _ = self.filename.split('$')
+
+            protocol, self.filename = self.filename.split(':')  # 프로토콜과 파일이름 분리
+            if protocol == 'file':
+                print("프로토콜 확인, ok보냄")
+                self.sock.send("ok".encode())  # 파일 받기 준비 완료
+
+                print("getFileFromServer 함수 이제 진입할거임.")
+                self.filename = getFileFromServer_teacher(self.filename, stdid, compcnt, processingstatus)  # 파일 수신
+                print(self.filename)
+
+                data = self.sock.recv(1024)
+                data_transferred += len(data)
+                # 클라우드 컴퓨터에 파일 저장
+                with open('src/' + self.filename, 'wb') as f:
+                    try:
+                        f.write(data)
+                        while data_transferred < int(filesize):
+                            data = self.sock.recv(1024)
+                            data_transferred += len(data)
+                            f.write(data)
+                            # data = data.decode('utf-8')
+
+
+                    except Exception as e:
+                        print(e)
+
+                print('파일 [%s] 전송 종료. 전송량 [%d]' % (self.filename, data_transferred))
+                return True
+
+        except ConnectionResetError as e:
+            print('Disconnected from client error:', e)
+            return False
 
 
 class ServerMain:
