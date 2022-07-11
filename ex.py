@@ -234,28 +234,27 @@ class Client:
             while True:
                 if self.ping_sw == False:
                     break
-                self.sock.sendall('ping┯'.encode(encoding='utf-8'))
+                self.send('ping┯')
                 time.sleep(3)
         except Exception:
             if self.ping_sw == True:
-                self.disconnect()
                 if log_sw:
                     msg=self.id+' ping_disconnect'
                     t=threading.Thread(target=save_log, args=(msg, lock))
                     t.start()
-    
+                self.disconnect()
+
     def pong(self):
         while True:
             now = time.time()
             if now - self.pong_time >= 5:
                 if self.ping_sw == True:
-                    self.disconnect()
                     if log_sw:
                         msg=self.id+' pong_disconnect'
                         t=threading.Thread(target=save_log, args=(msg, lock))
                         t.start()
+                    self.disconnect()
             time.sleep(1)
-
 
     def run(self):
         t1 = threading.Thread(target=self.receive, args=())
@@ -283,25 +282,25 @@ class Student(Client):
         self.room.clients[0].send(msg)
         self.sock.close()
         self.room.remove(self)
-        del server.students[self.id]
 
         if log_sw:
             msg='학생 '+self.id+' 가 종료하였습니다.'
             t=threading.Thread(target=save_log, args=(msg, lock))
             t.start()
 
+        del server.students[self.id]
 
     # 선생님의 종료로 인한 강제종료
     def t_disconnect(self):
         self.ping_sw = False
         self.sock.close()
         self.room.remove(self)
-        del server.students[self.id]  # 원본 소켓 삭제
 
         if log_sw:
             msg='학생 '+self.id+' 가 종료하였습니다.'
             t=threading.Thread(target=save_log, args=(msg, lock))
             t.start()
+        del server.students[self.id]  # 원본 소켓 삭제
 
     def receive(self):
         try:
@@ -340,8 +339,8 @@ class Student(Client):
                     t.start()
                     t.join()
                 else:  # 선생님에게 전달
-                    #print('[잘못] 선생님에게 전달하는 if문 들어옴')
-                    #print('[잘못] : ', msg)
+                    print('[잘못] 선생님에게 전달하는 if문 들어옴')
+                    print('[잘못] : ', msg)
                     msg += '┯'
                     self.room.clients[0].send(msg)
 
@@ -562,7 +561,7 @@ class Teacher(Client):
 
 
 class ServerMain:
-    ip = ''
+    ip = '127.0.0.1'
     port = 15555
 
     def __init__(self):
@@ -602,14 +601,11 @@ class ServerMain:
                 msg = 'connect┴' + student_id + '┯'
                 room.clients[0].send(msg)  # 선생님에게 학생 접속 메세지 전송
 
-                student.run()
-                student.send('connect complete┯')
-
                 if log_sw:
                     msg=student_id+ ' connected in '+ room.teacher_id+'\n'+room.teacher_id+ ' 에 접속한 인원 : '+ room.str()
                     t=threading.Thread(target=save_log, args=(msg, lock))
                     t.start()
-
+                student.run()
                 sw = False
 
         if sw:  # 학생이 방에 들어가지 못했다면
@@ -639,14 +635,13 @@ class ServerMain:
         self.teachers[teacher_id] = teacher  # 선생님 dictionary에 선생님 저장
         self.rooms.append(new_room)
         new_room.add(teacher)
-        teacher.send('connect complete┯')
-        teacher.run()
 
         if log_sw:
             msg=teacher_id+' connected\n'+new_room.teacher_id+' 에 접속한 인원 : ' +new_room.str()
             t=threading.Thread(target=save_log, args=(msg, lock))
             t.start()
 
+        teacher.run()
 
     def run(self):
         self.open()
