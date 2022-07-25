@@ -506,7 +506,6 @@ class Teacher(Client):
                         break
                     elif msg == 'pong':
                         self.pong_time = time.time()
-                        print('pong')
                         continue
                     elif msg == 'connect_student_list':
                         return_msg = 'connect_student_list┴' + self.room.str() + '┯'
